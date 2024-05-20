@@ -246,7 +246,13 @@ npm exec -- ng g service my-module/my-service/my-service
 
 On obtient un répertoire `my-module/my-service/` contenant le service et ses tests.
 
-###
+### Tubes
+
+### Directives
+
+### Gardes
+
+### Constantes
 
 ### *Data Transfert Objects*
 
