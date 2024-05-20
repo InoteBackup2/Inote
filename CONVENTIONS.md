@@ -195,24 +195,87 @@ handleError(error: HttpErrorResponse) {
 }
 ```
 
+### Modules
+
+Les modules de structure relient les composants par une arborescence.
+À mesure que le projet devient complexe une hiérarchie de modules apparaît.
+`app.module.ts` est alors le tronc de tous ces modules.
+
+Un sous-module nommé `my-submodule` d’un module `my-module` est construit comme suit :
+```shell
+npm exec -npm exec -- ng g module --routing --module my-module my-module/my-submodule
+```
+
+`my-submodule` s’accompagne alors de son module de routage `my-submodule-routing`.
+Une hiérarchie doit être établie dans le module de routage parent `my-module-routing` :
+```typescript
+const routes: Routes = [
+  {
+    path: 'my-module',
+    loadChildren: () => import('./my-submodule/my-submodule.module').then(m => m.MySubmoduleModule)
+  }
+];
+
+@NgModule({
+  imports: [RouterModule.forChild(routes)],
+  exports: [RouterModule]
+})
+export class MyModuleRoutingModule {}
+```
+
+### Composants
+
+Les composants fournissent les pages Web.
+Chaque composant nommé `my-component` s’accompagne d’un patron HTML et d’un style CSS.
+Au sein d’un module nommé `my-module` le composant est construit ainsi :
+```shell
+npm exec -- ng g component --inline-template false --module my-module my-module/my-component
+```
+
+Quatre fichiers se regroupent alors dans `my-module/my-component/` en incluant `my-component.spec.ts`.
+Ce dernier contribue aux tests.
+
+### Services
+
+Les services échangent l’information entre les composants.
+Ils assurent aussi les opérations les plus courantes.
+Soit un service nommé `my-service` dans un module nommé `my-module` et construit ainsi :
+```shell
+npm exec -- ng g service my-module/my-service/my-service
+```
+
+On obtient un répertoire `my-module/my-service/` contenant le service et ses tests.
+
+###
+
 ### *Data Transfert Objects*
 
-Les noms de ces classes seront suffixés par `Dto` et ils implémenteront une méthode de sérialisation comme suit :
+Les DTO sont associés à des interfaces.
+Soit un DTO nommé `my-data` en *kebab case* dans un module nommé `my-module` et construit comme suit :
+```shell
+npm exec -- ng g interface --dry-run --type dto my-module/my-data
+```
+
+On obtient alors un fichier `src/app/my-module/my-data.dto.ts` qui contient deux interfaces.
+Ces interfaces sont alors `MyDataRequestDto` et `MyDataResponseDto`.
+
 ```typescript
-export class CredentialsDto {
-  public bearer: string;
-  public refresh: string;
+interface MyDataDto {
+  /* Common properties */
+}
 
-  constructor(bearer: string, refresh: string) {
-    this.bearer = bearer;
-    this.refresh = refresh;
-  }
+export interface MyDataRequestDto extends MyDataDto {
+  /* Request properties */
+}
 
-  serializedData(): string {
-    return JSON.stringify(this);
-  }
+export interface MyDataResponseDto extends MyDataDto {
+  /* Response properties */
 }
 ```
+
+Elles correspondent respectivement aux corps de requête et de réponse reçus en JSON.
+
+
 ### Classes TypeScript
 
 Hormis de très rares cas, les constructeurs des classes TypeScript dans Angular doivent rester vides.
