@@ -197,178 +197,171 @@ Dans cette optique, la stratégie par défaut de génération de composant donne
 
 ### Échanges HTTP
 
-Le serveur Angular initiera les requêtes HTTP à l’aide du service `HttpClient` d’Angular qui sera injecté via le constructeur de la classe.
-Ce dernier est activé dans l’application par l’import de `HttpClientModule` depuis le module racine dans `src/app/app.module.ts`.
+Le serveur Angular initiera les requêtes HTTP à l’aide du service `**HttpClient**` d’Angular qui sera injecté via le constructeur de la classe.
+Ce dernier est **activé dans l’application au niveau global** : `HttpClientModule` est en conséquence importé depuis le module racine dans `src/app/app.module.ts`.
 
-Le lancement d’une requête se fera au sein d’une méthode dans un service dédié. 
+#### Envoi d’une requête
+
+Le lancement d’une requête se fera au sein d’une méthode **dans un service dédié.** 
+
 Cette dernière : 
-- Comportera en arguments les données à envoyer le cas échéant ;
-- Devra renvoyer un observable dont le type générique correspondra à l’objet renvoyé dans le corps de la réponse ;
-- Implémentera la JSON pour transmettre les données ;
-- Devra donc contenir l’en-tête HTTP ```{ "content-type": "application/json" }``` le cas échéant ;
+
+- Si l’envoi de données est requis:
+  - Ces dernières seront transmise sous forme de **dto en paramètres de méthode.**
+  - Le Dto sera *sérialisé en Objet JSON* via la méthode **stringify()** de l’interface **JSON** de Typescript.
+  - Ceci devra être spécifiquement signalé dans l’en-tête de la requête : `` { "content-type": "application/json" }``
+- Renverra **un observable dont le type générique sera ``HttpResponse<typeDataInBody>``.**
 - La méthode comportera l’option `observe` afin de pouvoir accéder à la réponse complète (*body*, *headers*, *status code*…) ;
-- Si la requête necessite une authentification elle sera de la forme suivante :
+- Par défaut le client Http d’Angular s’attend à recevoir un objet JSON si une donnée est présente dans le corps de la réponse. 
+  Dans le cas où le contenu est de type `` plain/text`` (la réponse contient une chaîne de caractères), il est impératif de le préciser dans la méthode avec l’option ``responseType: 'text'``, autrement une erreur de parsing de la réponse apparaîtra.
+- Si la requête nécessite une authentification elle sera de la forme suivante :
 ```typescript
-const headers = { Authorization: `Bearer ${bearer}` };
+const headers = { 'Authorization': `Bearer ${bearer}` };
 ```
 
 Nota bene : le *bearer* est le JWT reçu lors de la connexion au service.
 
-Exemple d’un service implémentant des requêtes HTTP :
-```typescript
-@Injectable()
-export class PublicUserService {
-  // Http client injection
-  constructor(private http: HttpClient) {}
+![](./readme_img/Frontend_httpRequest.png)
 
- /**
-   * loginUser user
-   *
-   * @param emailToSend : string
-   * @param passwordToSend : string
-   *
-   * @returns Observable on HttpResponse<CredentialsDto> that contains jwt & refresh-token
-   *
-   * @author AtsuhikoMochizuki
-   * @date 17-05-2024
-   */
-  loginUser(
-    emailToSend: string,
-    passwordToSend: string
-  ): Observable<HttpResponse<CredentialsDto>> {
-    return (
-      //Envoi de la requête
-      this.http
-        // Method type whith type of attempted data in body response
-        .post<CredentialsDto>(
-          // Url
-          BackEndPoints.SIGN_IN,
-          //Serialized body data
-          JSON.stringify({
-                username: emailToSend,
-                password: passwordToSend,
-          }),
-          //Options
-          {
-            headers: { "content-type": "application/json" },
-            observe: "response"
-          }
-        )
-    );
-  }
-}
-```
 
-L’exploitation de la méthode implémentant la requête et retournant un observable :
-- Devra prévoir le scénario en cas d’erreur ;
-- Devra pouvoir manipuler les informations retournées (*body*, *status*…).
 
-Exemple :
-```typescript
-/**
-   * Login the user
-   *
-   * @param email:string
-   * @param password:string
-   *
-   * @author AtsuhikoMochizuki
-   * @date 17-05-2024
-   */
-  private login(email: string, password: string) {
-    // Service call
-    this.publicUserservice
-      // Service method call with datas to send in body
-      .loginUser(email, password)
-      // Observable subscription
-      .subscribe(
-        // Handle successful response
-        (response: HttpResponse<CredentialsDto>) => {
-          this.statusAfterRequest = response.status;
-          if (this.statusAfterRequest == 200) {
-            this.credentialsDto = response.body;
-            if (this.credentialsDto)
-              this.tokenService.saveToken(this.credentialsDto?.bearer);
-            this.router.navigate(["dashboard"]);
+#### Exploitation de la méthode d’envoi de requête et de la réponse reçue
+
+- L’envoi de la requête (l’appel au service) nécessite de *souscrire à l’Observable qu’elle est censée renvoyer*.
+  Cette souscription implémentera obligatoirement:
+
+  - **La gestion de la réponse**
+  - **La gestion d’une éventuelle erreur**
+
+  Exemple:
+  ```typescript
+  this.publicUserService
+      .addUser(userToRegister) // Appel de la méthode implémentent l'envoi de la requête
+      .subscribe(				// Souscription à l'Observable
+        // Exploitation de la réponse	
+        (response) => {
+          if (response.body !== null) {
+            this.statusAfterRegisterRequest = response.status;
+            this.msgAfterRegisterRequest = response.body;
+            this.registering_success = true;
+          } else {
+            throw new Error("Public user HTTP body needed");
           }
         },
-        // Handle error
-        (error: HttpErrorResponse) => {
-          this.statusAfterRequest = error.status;
-          this.msgAfterRequest = error.error.detail;
-          return throwError(error.message);
+        // Scénario en cas d'erreur
+        (error) => {
+          this.statusAfterRegisterRequest = error.status;
+          this.msgAfterRegisterRequest = error.error.msg;
+          return throwError(error);
         }
       );
-  }
-```
+  ```
 
-Autre exemple en utilisant une méthode qui centralise la gestion de l’erreur :
-```typescript
-private login2(email: string, password: string) {
-  // Service call
-  this.publicUserservice
-    // Service method call with datas to send in body
-    .loginUser(email, password)
-    .pipe(catchError(this.handleError))
-    // Observable subscription
-    .subscribe(
-      // Handle successful response
-      (response: HttpResponse<CredentialsDto>) => {
-        this.statusAfterRequest = response.status;
-        if (this.statusAfterRequest == 200) {
-          this.credentialsDto = response.body;
-          if (this.credentialsDto) {
-            this.tokenService.saveToken(this.credentialsDto?.bearer);
-          }
-          this.router.navigate(["dashboard"]);
-        }
-      },
-      // Handle error
-      (error: HttpErrorResponse) => {
-        this.statusAfterRequest = error.status;
-        this.msgAfterRequest = error.error.detail;
-        return throwError(error.message);
-      }
-    );
-}
-
-handleError(error: HttpErrorResponse) {
-  let errorMessage = "Unknown error!";
-  if (error.error instanceof ErrorEvent) {
-    // Client-side errors
-    errorMessage = `Error: ${error.error.message}`;
-  } else {
-    // Server-side errors
-    errorMessage = `Error Code: ${error.status}\nMessage: ${error.message}`;
+  On peut également utiliser ``catchError()`` de Rxjs:
+  ```typescript
+  private login(email:string, password:string){
+      this.publicUserservice.loginUser(email,password).pipe(
+        catchError(error => {
+          this.statusAfterRequest = error.status;
+          this.msgAfterRequest = error.error.detail;
+          return throwError(error);
+        })
+  )
+  .subscribe((response) => {
+           this.statusAfterRequest = response.status;
+           if(response.status=="200"){
+              this.tokenService.saveToken(response.body.bearer);
+              this.router.navigate(['dashboard']);
+            }
+  		})
   }
-  window.alert(errorMessage);
-  return throwError(errorMessage);
-}
-```
+  ```
+
+  
 
 ### *Data Transfert Objects*
 
-Les noms de ces classes seront suffixés par `Dto` et ils implémenteront une méthode de sérialisation comme suit :
+#### Nommage
+
+Les Dto prendront la forme d’interfaces (type) aux propriétés immuables. 
+Dans un soucis de clarté, ils adopterons le nom de leur pendant côté backend, à savoir:
+```<PurposeOfDto>_Dto_<contexte(requête ou réponse)> ``` par exemple:
+`` PublicUserDtoRequest`` et **les propriétés devront obligatoirement également posséder le même nom** afin d’assurer le bon fonctionnement du transfert de données entre les deux couches
+
+*Exemple :*
+
+- *register-user.dto.ts* (côté frontend)
+
 ```typescript
-export class CredentialsDto {
-  public bearer: string;
-  public refresh: string;
-
-  constructor(bearer: string, refresh: string) {
-    this.bearer = bearer;
-    this.refresh = refresh;
-  }
-
-  serializedData(): string {
-    return JSON.stringify(this);
-  }
+export type RegisterUserDtoRequest = {
+    readonly name: string;
+    readonly username: string;
+    readonly password: string;
 }
 ```
+
+- *RegisterUserDtoRequest.java* (côté backend)
+
+```java
+public record RegisterUserDtoRequest(
+    String pseudo,
+    String username) {}
+```
+
+#### Initialisation
+
+Le Dto devra en conséquence *s’initialiser à la volée*:
+
+```typescript
+const userToRegister: PublicUserDtoRequest = {
+      name: "Tenshinan",
+      username: "tenshinan@kame-house.com",
+      password: "ch@ozu!78P",
+};
+```
+
+
+
+#### Sérialisation / Dé-sérialisation
+
+- Pour pouvoir être envoyé sur le réseau, *le Dto doit être sérialisé en un objet JSON*. Nous utiliserons pour cela la méthode **stringify**() de l’interface **JSON** proposée par Typescript:
+
+```typescript
+serializedUserToRegister: string = JSON.stringify(userToRegister);
+```
+
+- Pour pouvoir être exploité après réception, l’objet JSON doit être dé-sérialisé. Nous utiliserons pour cela la méthode **parse()** de l’interface **JSON** proposée par Typescript:
+
+  
+
+  ```typescript
+  // Objet JSON reçu
+  const jsonString: string =
+    '{"name": "Tenshinan", "username": "tenshinan@kame-house.com", "password":"ch@ozu!78P"}';
+  
+    // Reconstruction de l'objet exploitable
+  const deserializedUser:PublicUserDtoRequest = JSON.parse(jsonString);
+  console.log(deserializedUser.username);
+  
+  ```
+
+  
+  
+
 ### Classes TypeScript
 
-Hormis de très rares cas, les constructeurs des classes TypeScript dans Angular doivent rester vides.
-Il ne serviront la plupart du temps qu’à injecter les dépendances.
+#### Instanciation des objets
 
-Toute initialisation d’attribut s’effectuera dans la méthode Angular dédiée à cet effet : `ngOnInit`.
+Hormis de très rares cas, **les constructeurs des classes TypeScript dans Angular doivent rester vides.**
+Il ne serviront la plupart du temps qu’à **injecter les dépendances.**
+
+Toute **initialisation d’attribut s’effectuera dans la méthode Angular dédiée à cet effet : `ngOnInit`.**
+
+
+
+
+
+
 
 ## Serveur dorsal (Spring Boot)
 
